@@ -1,56 +1,39 @@
-import "./App.css";
-import Search from "./components/Search.tsx";
-import { useState, useEffect } from "react";
-import Spinner from "./components/Spinner.tsx";
-
-const API_BASE_URL = "https://api.themoviedb.org/3";
-
-const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
-
-const API_OPTIONS = {
-  method: "GET",
-  headers: {
-    accept: "application/json",
-    Authorization: `Bearer ${API_KEY}`,
-  },
-};
+import { useState, useEffect, useCallback } from "react";
+import { useDebounce } from "react-use";
+import Search from "./components/Search";
+import Spinner from "./components/Spinner";
+import MovieCard from "./components/MovieCard";
+import { fetchMovies } from "./utils/api";
+import { Movie } from "./models/movie.interface.ts";
 
 const App = () => {
   const [searchTerm, setSearchTerm] = useState<string>("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [movieList, setMovieList] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  const [movieList, setMovieList] = useState<Movie[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>("");
 
-  const fetchMovies = async () => {
+  useDebounce(() => setDebouncedSearchTerm(searchTerm), 500, [searchTerm]);
+
+  const handleFetchMovies = useCallback(async (query: string) => {
     setIsLoading(true);
     setErrorMessage("");
 
     try {
-      const endpoint = `${API_BASE_URL}/discover/movie?sort_by=popularity.desc`;
-      const response = await fetch(endpoint, API_OPTIONS);
-      if (!response.ok) {
-        setErrorMessage(`Failed to fetch movies?`);
-        return;
-      }
-
-      const data = await response.json();
-      if (data.Response === "False") {
-        setErrorMessage(data.Error || "Failed to fetch movies");
-        setMovieList([]);
-        return;
-      }
-
-      setMovieList(data.results || []);
+      const movies = await fetchMovies(query);
+      setMovieList(movies);
     } catch (error) {
-      setErrorMessage(error?.message);
+      setErrorMessage(
+        error instanceof Error ? error.message : "An unknown error occurred",
+      );
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchMovies();
-  }, []);
+    void handleFetchMovies(debouncedSearchTerm);
+  }, [debouncedSearchTerm, handleFetchMovies]);
 
   return (
     <main>
@@ -73,9 +56,7 @@ const App = () => {
           ) : (
             <ul>
               {movieList.map((movie) => (
-                <p key={movie.id} className="text-white">
-                  {movie.title}
-                </p>
+                <MovieCard key={movie.id} movie={movie} />
               ))}
             </ul>
           )}
